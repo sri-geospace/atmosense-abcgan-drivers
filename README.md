@@ -1,3 +1,2 @@
-# abcdrivers
-
-A stand-alone package for calculating the Driving parameters needed to run abcgan.
+# atmosense-abcgan-drivers
+Software to generate the drivers for ABCGAN
