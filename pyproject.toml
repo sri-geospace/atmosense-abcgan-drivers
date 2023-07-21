@@ -18,6 +18,17 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+dependencies = [
+    "numpy",
+    "scipy",
+    "h5py",
+    "flipchem",
+    "apexpy",
+    "skyfield",
+    "spacepy",
+    "pytz"
+]
+
 scripts = {abcgan-drivers = "abcdrivers.drivers:main"}
 
 [tool.setuptools.package-data]

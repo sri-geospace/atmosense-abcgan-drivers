@@ -8,6 +8,16 @@ This package can be installed with pip
 pip install git+https://github.com/sri-geospace/atmosense-abcgan-drivers.git
 ```
 
+The following external dependencies are required, some of which may need to be installed manually.
+- numpy
+- scipy
+- h5py
+- flipchem
+- apexpy
+- skyfield
+- spacepy
+- pytz
+
 ## Usage
 This package can be used to generate a full set of drivers both within other python scripts and as a stand-alone command line program.
 
