@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "abcgan-drivers"
-version = "0.0.1"
+version = "0.1.0"
 authors = [
   { name="Pablo Reyes", email="pablo.reyes@sri.com" },
   { name="Leslie Lamarche", email="leslie.lamarche@sri.com" }
@@ -18,3 +18,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+scripts = {abcgan-drivers = "abcdrivers.drivers:main"}
+
+[tool.setuptools.package-data]
+"abcdrivers.datafiles" = ["*"]

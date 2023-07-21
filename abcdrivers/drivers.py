@@ -9,11 +9,15 @@ from skyfield.almanac import moon_phase
 import spacepy.coordinates as spc
 import spacepy.time as spt
 import pytz
-import pkg_resources
-from importlib.resources import contents
-from importlib.resources import open_binary
-from importlib.resources import open_text
+from importlib.resources import path, open_binary, open_text
+from importlib.metadata import version
 from scipy.interpolate import Akima1DInterpolator
+import argparse
+import configparser
+import subprocess
+import platform
+import getpass
+
 
 def time_convert(time_array, glat, glon):
     # uses apexpy
@@ -34,8 +38,8 @@ def sza(time_array, glat, glon):
     RE = 6371.2*1000.
     DS = 149.6e6*1000.
 
-    f = pkg_resources.resource_filename(__name__, 'data_files/de421.bsp')
-    ephemeris = load(f)
+    f = path('abcdrivers.data_files', 'de421.bsp')
+    ephemeris = load(str(f))
     ts = load.timescale()
 
     times = ts.from_datetimes([t.replace(tzinfo=pytz.UTC) for t in time_array])
@@ -51,8 +55,8 @@ def sza(time_array, glat, glon):
 
 def lunar(time_array):
 
-    f = pkg_resources.resource_filename(__name__, 'data_files/de421.bsp')
-    ephemeris = load(f)
+    f = path('abcdrivers.data_files', 'de421.bsp')
+    ephemeris = load(str(f))
     ts = load.timescale()
 
     times = ts.from_datetimes([t.replace(tzinfo=pytz.UTC) for t in time_array])
@@ -92,10 +96,10 @@ def thermo_indx(time_array, verbose=True):
 
     if verbose:
         print(f"reading file tci_info.txt")
-    with pkg_resources.resource_stream(__name__, 'data_files/tci_info.txt') as f:
+    with open_text('abcdrivers.data_files', 'tci_info.txt') as f:
         for line in f:
             ls = line.split()
-            ds = ls[0].split(b'-')
+            ds = ls[0].split('-')
             date_table.append(dt.date(int(float(ds[2])),int(float(ds[0])),int(float(ds[1]))))
             tci_table.append(float(ls[1]))
 
@@ -113,7 +117,7 @@ def thermo_indx(time_array, verbose=True):
     # MEI
     if verbose:
         print(f"reading file meiv2.data.")
-    with pkg_resources.resource_stream(__name__, 'data_files/meiv2.data') as f:
+    with open_text('abcdrivers.data_files', 'meiv2.data') as f:
         data = np.loadtxt(f, skiprows=1, max_rows=43)
     utime_table = np.array([[(dt.datetime(int(row[0]),m+1,1)-dt.datetime.utcfromtimestamp(0)).total_seconds() for m,_ in enumerate(row[1:])] for row in data]).flatten()
     mei_table = data[:,1:].flatten()
@@ -128,7 +132,7 @@ def thermo_indx(time_array, verbose=True):
     # MJO
     if verbose:
         print(f"reading file MJO_index.dat")
-    with pkg_resources.resource_stream(__name__, 'data_files/MJO_index.dat') as f:
+    with open_text('abcdrivers.data_files', 'MJO_index.dat') as f:
         data = np.loadtxt(f, skiprows=2, usecols=[0,1,2,3,4])
     date_table = np.array([dt.date(int(d[0]), int(d[1]), int(d[2])) for d in data])
     RMM1_table = data[:,3]
@@ -152,7 +156,7 @@ def stratospheric_drivers(time_array, verbose=True):
     hemisphere = "N"
     fname = f'lat60{hemisphere}90{hemisphere}_Means_2hPa-100hPa.h5'
     # accesing the data store in the package folders:
-    merra2_N = open_binary('abcdata.drivers.data_files', fname)    
+    merra2_N = open_binary('abcdrivers.data_files', fname)    
     with h5py.File(merra2_N) as fp:
         levs = fp['/levs'][:]
         UnixTime = fp['/UnixTime'][:]
@@ -175,7 +179,7 @@ def stratospheric_drivers(time_array, verbose=True):
     return out_dict
 
 def dst_driver(time_array, verbose=True):
-    with open_text('abcdata.drivers.data_files', "WWW_dstae03507558.dat") as fp:
+    with open_text('abcdrivers.data_files', "WWW_dstae03507558.dat") as fp:
         lines = fp.readlines()
         
     curr_line = 0
@@ -197,6 +201,7 @@ def dst_driver(time_array, verbose=True):
     req_unixtime = [(x - dt.datetime.utcfromtimestamp(0)).total_seconds() for x in time_array]
     return {'dst':dsts_interp(req_unixtime)}
 
+
 def collect_drivers(time_array, glat, glon, verbose=True):
 
     drivers = {}
@@ -208,10 +213,10 @@ def collect_drivers(time_array, glat, glon, verbose=True):
     drivers.update(sza(time_array, glat, glon))
     if verbose:
         print("Working on the lunar drivers.")
-    #drivers.update(lunar(time_array))     # temporarily disable becasue spacepy giving Bus Error 11
+    drivers.update(lunar(time_array))     # temporarily disable becasue spacepy giving Bus Error 11
     if verbose:
         print('Working on geophysical indices.')
-    #drivers.update(geophys_indx(time_array))
+    drivers.update(geophys_indx(time_array))
     if verbose:
         print('Working on Thermo index.')
     drivers.update(thermo_indx(time_array))
@@ -235,42 +240,91 @@ def read_config(config_file):
     location_long  = config['PARAMS']['SITE_DESCRIPTION']
     site_lat = float(config['PARAMS']['SITE_LAT'])
     site_lon = float(config['PARAMS']['SITE_LON'])
-    site_info = dict(Site_Short=location_short, Site_Description=location_long, Site_Latitude=site_lat, Site_Longitude=site_lon)
+    site_info = {'Site_Short':location_short, 
+                 'Site_Description':location_long,
+                 'Site_Latitude':site_lat,
+                 'Site_Longitude':site_lon}
     
     outfile = config['METADATA']['OUTFILE']
     version_number = config['METADATA']['VERSION']
     version_description = config['METADATA']['DESCRIPTION']
 
-    timebinlength = float(config['PARAMS']['TIMEBIN'])  # length of time bins in hours
-    # consolidate these with ISO date
-    startyear =  int(config['PARAMS']['START_YEAR'])
-    startmonth = int(config['PARAMS']['START_MONTH'])
-    startday =   int(config['PARAMS']['START_DAY'])
-    endyear =    int(config['PARAMS']['END_YEAR'])
-    endmonth =   int(config['PARAMS']['END_MONTH'])
-    endday =     int(config['PARAMS']['END_DAY'])
-    starttime = dt.datetime(startyear,startmonth,startday)
-    endtime   = dt.datetime(endyear,endmonth,endday)
+    iso_starttime = config['PARAMS']['STARTTIME']
+    iso_endtime = config['PARAMS']['ENDTIME']
+    timestep = float(config['PARAMS']['TIMESTEP'])  # length of time bins in hours
+    starttime = dt.datetime.fromisoformat(iso_starttime)
+    endtime   = dt.datetime.fromisoformat(iso_endtime)
 
-    return outfile, starttime, endtime, timebinlength, site_info, version_number, version_description
+    return outfile, starttime, endtime, timestep, site_info, version_number, version_description
 
 
-def generate_time_array(starttime, endtime, timebinlength):
-    # change so binlength is not hardcoded
+def generate_time_array(starttime, endtime, timestep):
+    """
+    Generate an array of datetime objects
+
+    Parameters
+    ----------
+    starttime: datetime.datetime
+        Start of interval
+    endtime: datetime.datetime
+        End of interval
+    timestep: float
+        Time steps in fractional hours
+    """
     time_array = np.array([starttime+dt.timedelta(hours=h) for h in np.arange(
-        (endtime-starttime).total_seconds()/3600)])
+        (endtime-starttime).total_seconds()/(3600*timestep))])
     utime = np.array([(t-dt.datetime.utcfromtimestamp(0)).total_seconds()
                       for t in time_array])
-    return time_array
+    return time_array, utime
 
 
 def processing_info(version_number, version_description):
-    # Copy/Paste this function from utils here
-    proc_info = dict(Version=version_number, Description=version_description)
+
+    # file creation information
+    proc_info = {}
+    proc_info['Version'] = version_number
+    proc_info['Description'] = version_description
+    proc_info['CreationTimeStamp'] = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    proc_info['PackageVersion'] = version('abcgan-drivers')
+    proc_info['CodeVersion'] = subprocess.run(['git', 'describe', '--always'], capture_output=True, text=True).stdout.rstrip()
+    proc_info['LatestCommit'] = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.rstrip()
+    # computer information
+    proc_info['PythonVersion'] = platform.python_version()
+    proc_info['MachineType'] = platform.machine()
+    proc_info['System'] = '{} {} {}'.format(platform.system(),platform.release(),platform.version())
+    proc_info['User'] = getpass.getuser()
+    proc_info['HostName'] = platform.node()
+
+    proc_info['Packages_Versions/abcdrivers_version'] = version('abcgan-drivers')
+    proc_info['Packages_Versions/scipy_version'] = version('scipy')
+    proc_info['Packages_Versions/apexpy_version'] = version('apexpy')
+    proc_info['Packages_Versions/flipchem_version'] = version('flipchem')
+    proc_info['Packages_Versions/numpy_version'] = version('numpy')
+    proc_info['Packages_Versions/h5py_version'] = version('h5py')
+    proc_info['Packages_Versions/skyfield_version'] = version('skyfield')
+    proc_info['Packages_Versions/spacepy_version'] = version('spacepy')
+
     return proc_info
+
 
 # save output file
 def save_output(outfile, drivers, utime, site_info=None, proc_info=None):
+    """
+    Generate output hdf5 file
+
+    Parameters
+    ----------
+    outfile: str
+        Name of output hdf5 file (includes path)
+    drivers: dict
+        Dictionary of drivers
+    utime: nd.array
+        Array of Unix time stamps for each driver
+    site_info: dict
+        Dictionary of site name and coordinates
+    proc_info: dict
+        Dictornary of processing info
+    """
 
     print(f"Saving HDF5 file: {outfile}")
     with h5py.File(outfile, 'a') as out:
@@ -283,14 +337,15 @@ def save_output(outfile, drivers, utime, site_info=None, proc_info=None):
         # write site info to file
         for key, value in site_info.items():
             out.create_dataset('SiteInfo/{}'.format(key),
-                               data=np.array(value.encode('utf-8')))
+                               data=value)
 
-        # initialize datasets for the first time
+        # write time array to file
         tot_time = out.create_dataset('UnixTime', data=utime, chunks=True,
                                       maxshape=(None,), track_order=True)
         tot_time.attrs.create('full name', 'Unix Time')
         tot_time.attrs.create('description', 'Seconds since January 1, 1970')
 
+        # write drivers to file
         for key in drivers.keys():
             ds = out.create_dataset('Drivers/{}'.format(key),
                                     data=drivers[key], track_order=True,
@@ -300,17 +355,16 @@ def save_output(outfile, drivers, utime, site_info=None, proc_info=None):
 
 def generate_drivers(config_file):
 
-    outfile, starttime, endtime, timebinlength, site_info, version_number, version_description = read_config(configfile)
+    outfile, starttime, endtime, timestep, site_info, version_number, version_description = read_config(config_file)
 
-    time_array = generate_time_array(starttime, endtime, timebinlength)
+    time_array, utime = generate_time_array(starttime, endtime, timestep)
 
-    processing_info = processing_info(version_number, version_description)
+    proc_info = processing_info(version_number, version_description)
 
     # calculate drivers for each time bin
     drivers = collect_drivers(time_array, site_info['Site_Latitude'], site_info['Site_Longitude'])
 
-
-    save_output(outfile, drivers, time_array, site_info, processing_info)
+    save_output(outfile, drivers, utime, site_info, proc_info)
 
 
 def main(args=None):
@@ -319,28 +373,10 @@ def main(args=None):
     parser.add_argument('config_file', help='Config file.')
 
     parsed_args = parser.parse_args(args)
-    print(f"config_file :{parsed_args.config_file}")
+    print(f"config_file : {parsed_args.config_file}")
     
     
     generate_drivers(parsed_args.config_file)
 
 
 
-#def main():
-#    starttime = dt.datetime(1998,1,1)
-#    endtime = dt.datetime(2020,12,31)
-#
-#    time_array = np.array([starttime+dt.timedelta(hours=h) for h in np.arange((endtime-starttime).total_seconds()/3600)])
-#    unixtime = np.array([(t-dt.datetime.utcfromtimestamp(0)).total_seconds() for t in time_array])
-#    out_drive = collect_drivers(unixtime, 65.5, -147.9)
-#
-#    print(out_drive)
-#
-#
-#if __name__=='__main__':
-#    main()
-# with h5py.File('sample_drivers.h5', 'w') as h5:
-#     h5.create_dataset('UnixTime', data=utime)
-#     h5.create_dataset('MagneticLocalTime', data=mlt)
-#     for k, v in gpi_out.items():
-#         h5.create_dataset(k, data=v)
