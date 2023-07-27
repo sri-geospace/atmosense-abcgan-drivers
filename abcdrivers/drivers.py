@@ -20,9 +20,30 @@ import getpass
 
 
 def time_convert(time_array, glat, glon):
-    # uses apexpy
+    """
+    Calculate the drivers related to time and site position.  Conversion to
+    magnetic coordinates is done with apexpy.
 
-    # calculate magnetic local time
+    Parameters
+    ----------
+    time_array: nd.array of datetime.datetime objects
+        times to calculate drivers at
+    glat: float
+        geodetic latitude of site
+    glon: flot
+        geodetic longitude of site
+
+    Output
+    ------
+    MLT: nd.array
+        magnetic local time
+    SLT: nd.array
+        solar local time
+    MLAT: nd.array
+        magnetic latitude
+    """
+
+    # calculate magnetic local time and magnetic latitude
     A = Apex(time_array[0])
     mlat, mlt = A.convert(glat, glon, 'geo', 'mlt', datetime=np.array(time_array))
 
@@ -33,7 +54,26 @@ def time_convert(time_array, glat, glon):
 
 
 def sza(time_array, glat, glon):
-    # uses skyfield
+    """
+    Calculate the drivers related to the solar position.  Ephemerides is 
+    calculated with skyfield.
+
+    Parameters
+    ----------
+    time_array: nd.array of datetime.datetime objects
+        times to calculate drivers at
+    glat: float
+        geodetic latitude of site
+    glon: flot
+        geodetic longitude of site
+
+    Output
+    ------
+    SZA: nd.array
+        solar zenith angle 
+    ShadHeight: nd.array
+        shadow height
+    """
 
     RE = 6371.2*1000.
     DS = 149.6e6*1000.
@@ -54,6 +94,26 @@ def sza(time_array, glat, glon):
     return {'SZA':sza*180./np.pi, 'ShadHeight':shadow_height}
 
 def lunar(time_array):
+    """
+    Calculate lunar position and phase drivers.  Ephemerides are calculated
+    with skyfield.
+
+    Parameters
+    ----------
+    time_array: nd.array of datetime.datetime objects
+        times to calculate drivers at
+
+    Output
+    ------
+    moon_x: nd.array
+        x position of moon in GSE coordinates
+    moon_y: nd.array
+        y position of moon in GSE coordinates
+    moon_z: nd.array
+        z position of moon in GSE coordinates
+    moon_phase: nd.array
+        phase of moon as an angle (degrees)
+    """
 
     f = path('abcdrivers.data_files', 'de421.bsp')
     ephemeris = load(str(f))
@@ -75,6 +135,26 @@ def lunar(time_array):
 
 
 def geophys_indx(time_array):
+    """
+    Calculate the geophysical index drivers.  These are accessed
+    with flipchem.
+
+    Parameters
+    ----------
+    time_array: nd.array of datetime.datetime objects
+        times to calculate drivers at
+
+    Output
+    ------
+    F10.7: nd.array
+        solar radio flux at 10.7 cm
+    F10.7avg: nd.array
+        average solar radio flux at 10.7 cm
+    ap: nd.array
+        three hour equivilent planetary amplitude index
+    Ap: nd.array
+        daily equivilent planetary amplitude index
+    """
 
     gpi = {'F10.7':[], 'F10.7avg':[], 'ap':[], 'Ap':[]}
     for t in time_array:
@@ -89,7 +169,67 @@ def geophys_indx(time_array):
 
     return gpi
 
-def thermo_indx(time_array, verbose=True):
+def dst_driver(time_array, verbose=False):
+    """
+    Calculate Dst index
+
+    Parameters
+    ----------
+    time_array: nd.array of datetime.datetime objects
+        times to calculate drivers at
+    verbose: bool
+        whether or not to print information indicating when index files are being read
+
+    Output
+    ------
+    dst: nd.array
+        disturbance storm-time (Dst) index
+    """
+
+    with open_text('abcdrivers.data_files', "WWW_dstae03507558.dat") as fp:
+        lines = fp.readlines()
+        
+    curr_line = 0
+    dts = list()
+    dsts = list()
+    while curr_line < len(lines)-1:
+        if not lines[curr_line][0].isdigit():
+            curr_line += 1
+            continue
+        sdate, stime, sdoy, dst0 = lines[curr_line].strip().split()
+        dts.append(dt.datetime.strptime(sdate+stime,"%Y-%m-%d%H:%M:%S.%f"))
+        dsts.append(float(dst0))
+        curr_line += 1
+    dts = np.array(dts)
+    dsts = np.array(dsts)
+    
+    unixtime = [(x - dt.datetime.utcfromtimestamp(0)).total_seconds() for x in dts]
+    dsts_interp = Akima1DInterpolator(x=unixtime, y=dsts)
+    req_unixtime = [(x - dt.datetime.utcfromtimestamp(0)).total_seconds() for x in time_array]
+    return {'dst':dsts_interp(req_unixtime)}
+
+def thermo_indx(time_array, verbose=False):
+    """
+    Calculate drivers related to thermospheric indices.
+
+    Parameters
+    ----------
+    time_array: nd.array of datetime.datetime objects
+        times to calculate drivers at
+    verbose: bool
+        whether or not to print information indicating when index files are being read
+
+    Output
+    ------
+    TCI: nd.array
+        thermosphere climate index
+    MEI: nd.array
+        multivariate El Nino/Southern Oscillation (ESNO) index
+    RMM1: nd.array
+        first component of the Madden-Julian Oscillation (MJO) index
+    RMM2: nd.array
+        second component of the Madden-Julian Oscillation (MJO) index
+    """
     # TCI
     date_table = []
     tci_table = []
@@ -152,7 +292,25 @@ def thermo_indx(time_array, verbose=True):
 
     return {'TCI':tci, 'MEI':mei, 'RMM1':rmm1, 'RMM2':rmm2}
 
-def stratospheric_drivers(time_array, verbose=True):
+def stratospheric_drivers(time_array, verbose=False):
+    """
+    Calculate drivers related to stratospheric temperature and wind
+
+    Parameters
+    ----------
+    time_array: nd.array of datetime.datetime objects
+        times to calculate drivers at
+    verbose: bool
+        whether or not to print information indicating when index files are being read
+
+    Output
+    ------
+    T*: nd.array
+        stratospheric temperature at pressure layer *
+    U*: nd.array
+        stratospheric winds at pressure layer *
+    """
+
     hemisphere = "N"
     fname = f'lat60{hemisphere}90{hemisphere}_Means_2hPa-100hPa.h5'
     # accesing the data store in the package folders:
@@ -178,31 +336,27 @@ def stratospheric_drivers(time_array, verbose=True):
     
     return out_dict
 
-def dst_driver(time_array, verbose=True):
-    with open_text('abcdrivers.data_files', "WWW_dstae03507558.dat") as fp:
-        lines = fp.readlines()
-        
-    curr_line = 0
-    dts = list()
-    dsts = list()
-    while curr_line < len(lines)-1:
-        if not lines[curr_line][0].isdigit():
-            curr_line += 1
-            continue
-        sdate, stime, sdoy, dst0 = lines[curr_line].strip().split()
-        dts.append(dt.datetime.strptime(sdate+stime,"%Y-%m-%d%H:%M:%S.%f"))
-        dsts.append(float(dst0))
-        curr_line += 1
-    dts = np.array(dts)
-    dsts = np.array(dsts)
-    
-    unixtime = [(x - dt.datetime.utcfromtimestamp(0)).total_seconds() for x in dts]
-    dsts_interp = Akima1DInterpolator(x=unixtime, y=dsts)
-    req_unixtime = [(x - dt.datetime.utcfromtimestamp(0)).total_seconds() for x in time_array]
-    return {'dst':dsts_interp(req_unixtime)}
-
 
 def collect_drivers(time_array, glat, glon, verbose=True):
+    """
+    Collect all drivers for a given time and location
+
+    Parameters
+    ----------
+    time_array: nd.array of datetime.datetime objects
+        times to calculate drivers at
+    glat: float
+        geodetic latitude of site
+    glon: flot
+        geodetic longitude of site
+    verbose: bool
+        whether or not to print information indicating when index files are being read
+
+    Returns
+    -------
+    drivers: dict
+        dictonary of all drivers
+    """
 
     drivers = {}
     if verbose:
@@ -213,27 +367,51 @@ def collect_drivers(time_array, glat, glon, verbose=True):
     drivers.update(sza(time_array, glat, glon))
     if verbose:
         print("Working on the lunar drivers.")
-    drivers.update(lunar(time_array))     # temporarily disable becasue spacepy giving Bus Error 11
+    drivers.update(lunar(time_array))
     if verbose:
         print('Working on geophysical indices.')
     drivers.update(geophys_indx(time_array))
     if verbose:
+        print('Working on dst drivers.')
+    drivers.update(dst_driver(time_array, verbose=verbose))
+    if verbose:
         print('Working on Thermo index.')
-    drivers.update(thermo_indx(time_array))
+    drivers.update(thermo_indx(time_array, verbose=verbose))
     if verbose:
         print('Working on stratospheric drivers.')
-    drivers.update(stratospheric_drivers(time_array))
-    if verbose:
-        print('Working on dst drivers.')
-    drivers.update(dst_driver(time_array))
+    drivers.update(stratospheric_drivers(time_array, verbose=verbose))
     
     return drivers
 
 
 
 def read_config(config_file):
+    """
+    Read in configuration file.
 
-    # read in config file
+    Parameters
+    ----------
+    config_file: str
+        configuration file name
+
+    Returns
+    -------
+    outfile: str
+        output file name
+    starttime: datetime.datetime
+        start time of interval
+    endtime: datetime.datetime
+        end time of interval
+    timestep: float
+        time step in decimal hours
+    site_info: dict
+        basic information about the site to be included in metadata
+    version_number: str
+        version specifier for this version of the drivers file
+    version_description: str
+        short description of this version of the drivers file
+    """
+
     config = configparser.ConfigParser()
     config.read(config_file)
     location_short = config['PARAMS']['SITE_SHORT_NAME']
@@ -260,7 +438,7 @@ def read_config(config_file):
 
 def generate_time_array(starttime, endtime, timestep):
     """
-    Generate an array of datetime objects
+    Generate an array of times based on start and end times and a time step
 
     Parameters
     ----------
@@ -270,6 +448,13 @@ def generate_time_array(starttime, endtime, timestep):
         End of interval
     timestep: float
         Time steps in fractional hours
+
+    Returns
+    -------
+    time_array: nd.array of datetime.datetime objects
+        array of times
+    utime: nd.array
+        array of unix times
     """
     time_array = np.array([starttime+dt.timedelta(hours=h) for h in np.arange(
         (endtime-starttime).total_seconds()/(3600*timestep))])
@@ -279,6 +464,21 @@ def generate_time_array(starttime, endtime, timestep):
 
 
 def processing_info(version_number, version_description):
+    """
+    Create dictionary of processing information.
+
+    Parameters
+    ----------
+    version_number: str
+        version specifier for this version of the drivers file
+    version_description: str
+        short description of this version of the drivers file
+    
+    Returns
+    -------
+    proc_info: dict
+        dictionary of processing information
+    """
 
     # file creation information
     proc_info = {}
@@ -354,6 +554,14 @@ def save_output(outfile, drivers, utime, site_info=None, proc_info=None):
     print("done.")
 
 def generate_drivers(config_file):
+    """
+    Automatically generate full set of drivers based on config file
+
+    Parameters
+    ----------
+    config_file: str
+        configuration file name
+    """
 
     outfile, starttime, endtime, timestep, site_info, version_number, version_description = read_config(config_file)
 
