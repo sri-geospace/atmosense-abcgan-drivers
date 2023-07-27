@@ -32,4 +32,4 @@ dependencies = [
 scripts = {abcgan-drivers = "abcdrivers.drivers:main"}
 
 [tool.setuptools.package-data]
-"abcdrivers.datafiles" = ["*"]
+"abcdrivers.data_files" = ["*"]
