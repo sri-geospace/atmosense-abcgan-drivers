@@ -9,14 +9,14 @@ pip install git+https://github.com/sri-geospace/atmosense-abcgan-drivers.git
 ```
 
 The following external dependencies are required, some of which may need to be installed manually.
-- numpy
-- scipy
-- h5py
-- flipchem
-- apexpy
-- skyfield
-- spacepy
-- pytz
+- [numpy](https://numpy.org/)
+- [scipy](https://scipy.org/)
+- [h5py](https://www.h5py.org/)
+- [flipchem](https://github.com/amisr/flipchem)
+- [apexpy](https://apexpy.readthedocs.io/en/latest/)
+- [skyfield](https://rhodesmill.org/skyfield/)
+- [spacepy](https://spacepy.github.io/)
+- [pytz](https://pythonhosted.org/pytz/)
 
 ## Usage
 This package can be used to generate a full set of drivers both within other python scripts and as a stand-alone command line program.
@@ -56,3 +56,6 @@ abcgan-drivers config.ini
 
 Drivers will be saved to an output hdf5 file along with some other information about the processing.  The output file name is specified in the config file.
 
+## Time Range Limitations
+
+Many drivers are extracted from data files included as package data.  Consequentially, this package can only calculate drivers in the time ranges these data files cover.  To calculate drivers for recent times, the data files may need to be manually updated (see `abcdrivers/data_files/README.md`).  This package cannot calculate drivers for future times.
