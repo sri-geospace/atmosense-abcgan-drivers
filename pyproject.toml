@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "abcgan-drivers"
-version = "0.1.0"
+version = "1.0.0"
 authors = [
   { name="Pablo Reyes", email="pablo.reyes@sri.com" },
   { name="Leslie Lamarche", email="leslie.lamarche@sri.com" }
