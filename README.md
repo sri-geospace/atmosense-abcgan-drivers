@@ -56,6 +56,32 @@ abcgan-drivers config.ini
 
 Drivers will be saved to an output hdf5 file along with some other information about the processing.  The output file name is specified in the config file.
 
+## Drivers
+
+| Key | Full Name | Description |
+| --- | --------- | ----------- |
+| MLT | Magnetic Local Time | Local time calculated used magnetic coordinate system |
+| SLT | Solar Local Time | Local time as determined by the sun's position |
+| MLAT | Magnetic Latitude | Apex magnetic latitude |
+| SZA | Solar Zenith Angle | Angle between the sun and local zenith |
+| ShadHeight | Shadow Height | Height of the Earth's shadow in the atmosphere |
+| moon_x | Lunar Position (x) | X component of Lunar position in GSE coordinates |
+| moon_y | Lunar Position (y) | Y component of Lunar position in GSE coordinates |
+| moon_z | Lunar Position (z) | Z component of Lunar position in GSE coordinates |
+| moon_phase | Lunar Phase | Lunar phase in degrees |
+| F10.7 | F10.7 Solar Radio Flux | Solar rado flux at 10.7 cm (2800 MHz) in s.f.u (10^-22 W m^-2 Hz^-1) |
+| F10.7avg | Average F10.7 Solar Radio Flux | Average solar radio flux at 10.7 cm (2800 MHz) in s.f.u (10^-22 W m^-2 Hz^-1) |
+| ap | ap Geomagnetic Index | Three hour equivalent planetary amplitude |
+| Ap | Daily Ap Index | Daily equivalent planetary amplitude |
+| dst | Disturbance storm-time (Dst) index | Index for geomagnetic storm activity |
+| TCI | Thermosphere Climate Index | 60-day running average of global cooling power radiated from the thermosphere |
+| MEI | Multivariate ESNO Index | Measure of the El Nino/Southern Oscillation (ESNO)/sea surface temperature |
+| RMM1 | First MJO Index | First component of the Madden-Julian Oscillation Indices |
+| RMM2 | Second MJO Index | Second component of the Madden-Julian Oscillation Indices |
+| T* | Stratospheric Temperature | Stratospheric Temperature at pressure level * |
+| U* | Stratospheric Wind | Stratospheric Wind at pressure level * |
+
+
 ## Time Range Limitations
 
 Many drivers are extracted from data files included as package data.  Consequentially, this package can only calculate drivers in the time ranges these data files cover.  To calculate drivers for recent times, the data files may need to be manually updated (see `abcdrivers/data_files/README.md`).  This package cannot calculate drivers for future times.
