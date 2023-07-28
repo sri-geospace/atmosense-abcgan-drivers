@@ -3,13 +3,13 @@ import numpy as np
 import h5py
 import flipchem
 from apexpy import Apex
-from skyfield.api import Topos, load
+from skyfield.api import Topos, Loader
 from skyfield.framelib import itrs
 from skyfield.almanac import moon_phase
 import spacepy.coordinates as spc
 import spacepy.time as spt
 import pytz
-from importlib.resources import path, open_binary, open_text
+from importlib.resources import files, open_binary, open_text
 from importlib.metadata import version
 from scipy.interpolate import Akima1DInterpolator
 import argparse
@@ -78,8 +78,9 @@ def sza(time_array, glat, glon):
     RE = 6371.2*1000.
     DS = 149.6e6*1000.
 
-    f = path('abcdrivers.data_files', 'de421.bsp')
-    ephemeris = load(str(f))
+    data_dir = files('abcdrivers.data_files')
+    load = Loader(data_dir)
+    ephemeris = load('de421.bsp')
     ts = load.timescale()
 
     times = ts.from_datetimes([t.replace(tzinfo=pytz.UTC) for t in time_array])
@@ -115,7 +116,11 @@ def lunar(time_array):
         phase of moon as an angle (degrees)
     """
 
-    f = path('abcdrivers.data_files', 'de421.bsp')
+    data_dir = files('abcdrivers.data_files')
+    load = Loader(data_dir)
+    ephemeris = load('de421.bsp')
+    ts = load.timescale()
+
     ephemeris = load(str(f))
     ts = load.timescale()
 
@@ -186,7 +191,7 @@ def dst_driver(time_array, verbose=False):
         disturbance storm-time (Dst) index
     """
 
-    with open_text('abcdrivers.data_files', "WWW_dstae03507558.dat") as fp:
+    with open_text('abcdrivers.data_files', "dstae.dat") as fp:
         lines = fp.readlines()
         
     curr_line = 0
